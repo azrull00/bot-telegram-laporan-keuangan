@@ -108,7 +108,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Parse data produk dari pesan Telegram\nconst message = $input.first().json.message.text;\nconst lines = message.split('\\n');\n\nlet productData = {\n  nama_produk: '',\n  harga_jual: 0,\n  margin: 0,\n  cost: 0,\n  tanggal: new Date().toISOString().split('T')[0],\n  chat_id: $input.first().json.message.chat.id\n};\n\nlines.forEach(line => {\n  if (line.includes('📦 Nama Produk:')) {\n    productData.nama_produk = line.split('📦 Nama Produk:')[1].trim();\n  } else if (line.includes('💰 Harga Jual:')) {\n    productData.harga_jual = parseInt(line.split('💰 Harga Jual:')[1].trim().replace(/[^0-9]/g, ''));\n  } else if (line.includes('📊 Margin:')) {\n    productData.margin = parseInt(line.split('📊 Margin:')[1].trim().replace(/[^0-9]/g, ''));\n  } else if (line.includes('💸 Cost:')) {\n    productData.cost = parseInt(line.split('💸 Cost:')[1].trim().replace(/[^0-9]/g, ''));\n  }\n});\n\n// Validasi data\nif (!productData.nama_produk || productData.harga_jual === 0 || productData.margin === 0 || productData.cost === 0) {\n  throw new Error('Data produk tidak lengkap. Pastikan semua field terisi dengan benar.');\n}\n\nreturn [productData];"
+        "jsCode": "try {\n  // Parse data produk dari pesan Telegram\n  const message = $input.first().json.message.text;\n  const lines = message.split('\\n');\n  const chatId = $input.first().json.message.chat.id;\n\n  let productData = {\n    nama_produk: '',\n    harga_jual: 0,\n    margin: 0,\n    cost: 0,\n    tanggal: new Date().toISOString().split('T')[0],\n    chat_id: chatId\n  };\n\n  // Parse setiap baris dengan error handling\n  lines.forEach(line => {\n    try {\n      if (line.includes('📦 Nama Produk:')) {\n        productData.nama_produk = line.split('📦 Nama Produk:')[1].trim();\n      } else if (line.includes('💰 Harga Jual:')) {\n        const hargaStr = line.split('💰 Harga Jual:')[1].trim().replace(/[^0-9]/g, '');\n        productData.harga_jual = parseInt(hargaStr) || 0;\n      } else if (line.includes('📊 Margin:')) {\n        const marginStr = line.split('📊 Margin:')[1].trim().replace(/[^0-9]/g, '');\n        productData.margin = parseInt(marginStr) || 0;\n      } else if (line.includes('💸 Cost:')) {\n        const costStr = line.split('💸 Cost:')[1].trim().replace(/[^0-9]/g, '');\n        productData.cost = parseInt(costStr) || 0;\n      }\n    } catch (lineError) {\n      console.log('Error parsing line:', line, lineError.message);\n    }\n  });\n\n  // Validasi data dengan pesan error yang lebih detail\n  const errors = [];\n  \n  if (!productData.nama_produk || productData.nama_produk.trim() === '') {\n    errors.push('📦 Nama Produk tidak boleh kosong');\n  }\n  \n  if (productData.harga_jual === 0 || isNaN(productData.harga_jual)) {\n    errors.push('💰 Harga Jual harus berupa angka dan lebih dari 0');\n  }\n  \n  if (productData.margin === 0 || isNaN(productData.margin)) {\n    errors.push('📊 Margin harus berupa angka dan lebih dari 0');\n  }\n  \n  if (productData.cost === 0 || isNaN(productData.cost)) {\n    errors.push('💸 Cost harus berupa angka dan lebih dari 0');\n  }\n  \n  // Validasi logika bisnis\n  if (productData.harga_jual > 0 && productData.cost > 0 && productData.harga_jual <= productData.cost) {\n    errors.push('⚠️ Harga Jual harus lebih besar dari Cost');\n  }\n  \n  if (productData.margin > 0 && productData.harga_jual > 0 && productData.margin >= productData.harga_jual) {\n    errors.push('⚠️ Margin tidak boleh lebih besar atau sama dengan Harga Jual');\n  }\n\n  if (errors.length > 0) {\n    throw new Error('❌ Data produk tidak valid:\\n\\n' + errors.join('\\n') + '\\n\\n📝 Format yang benar:\\n📦 Nama Produk: [nama produk]\\n💰 Harga Jual: [angka]\\n📊 Margin: [angka]\\n💸 Cost: [angka]\\n\\nContoh:\\n📦 Nama Produk: Laptop Gaming\\n💰 Harga Jual: 15000000\\n📊 Margin: 2000000\\n💸 Cost: 13000000');\n  }\n\n  // Tambahkan calculated fields\n  productData.profit = productData.harga_jual - productData.cost;\n  productData.margin_percentage = Math.round((productData.margin / productData.harga_jual) * 100);\n\n  return [productData];\n\n} catch (error) {\n  console.error('Error in Parse Product Data:', error);\n  throw new Error(error.message || 'Terjadi kesalahan saat memproses data produk');\n}"
       },
       "id": "parse-product-data",
       "name": "Parse Product Data",
@@ -158,7 +158,7 @@
     {
       "parameters": {
         "chatId": "={{$json.chat_id}}",
-        "text": "✅ Data produk berhasil disimpan!\n\n📦 Produk: {{$json.nama_produk}}\n💰 Harga Jual: Rp {{$json.harga_jual.toLocaleString('id-ID')}}\n📊 Margin: Rp {{$json.margin.toLocaleString('id-ID')}}\n💸 Cost: Rp {{$json.cost.toLocaleString('id-ID')}}\n📅 Tanggal: {{$json.tanggal}}"
+        "text": "✅ Data produk berhasil disimpan ke Google Sheets!\n\n📦 Produk: {{$json.nama_produk}}\n💰 Harga Jual: Rp {{$json.harga_jual.toLocaleString('id-ID')}}\n📊 Margin: Rp {{$json.margin.toLocaleString('id-ID')}} ({{$json.margin_percentage}}%)\n💸 Cost: Rp {{$json.cost.toLocaleString('id-ID')}}\n🎯 Profit: Rp {{$json.profit.toLocaleString('id-ID')}}\n📅 Tanggal: {{$json.tanggal}}\n\n💡 Gunakan /laporan untuk melihat laporan lengkap"
       },
       "id": "confirm-save",
       "name": "Confirm Save",
@@ -208,7 +208,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Baca data dari Google Sheets atau buat data kosong jika belum ada\nlet salesData = [];\nlet chatId;\n\n// Cek apakah ada input dari Google Sheets atau dari trigger\nif ($input.all().length > 0) {\n  const inputData = $input.all();\n  \n  // Jika ada data dari Google Sheets\n  if (inputData[0].json && Array.isArray(inputData)) {\n    salesData = inputData.map(item => ({\n      tanggal: item.json.tanggal || '',\n      nama_produk: item.json.nama_produk || '',\n      harga_jual: parseInt(item.json.harga_jual) || 0,\n      margin: parseInt(item.json.margin) || 0,\n      cost: parseInt(item.json.cost) || 0\n    })).filter(item => item.nama_produk); // Filter data yang valid\n  }\n  \n  // Ambil chat_id dari input pertama - dengan validasi tambahan\n  if (inputData[0].json.message && inputData[0].json.message.chat && inputData[0].json.message.chat.id) {\n    chatId = inputData[0].json.message.chat.id;\n  } else if (inputData[0].json.chat_id) {\n    chatId = inputData[0].json.chat_id;\n  }\n}\n\n// Validasi chat_id - gunakan environment variable jika tidak ada\nif (!chatId) {\n  // Gunakan ADMIN_CHAT_ID dari environment variable\n  chatId = $env.ADMIN_CHAT_ID;\n  \n  // Jika masih kosong, gunakan fallback\n  if (!chatId) {\n    throw new Error('Chat ID tidak ditemukan. Pastikan ADMIN_CHAT_ID sudah diatur di environment variables.');\n  }\n}\n\nif (salesData.length === 0) {\n  return [{\n    json: {\n      message: 'Belum ada data penjualan di Google Sheets. Silakan tambahkan data produk terlebih dahulu.',\n      chat_id: chatId\n    }\n  }];\n}\n\n// Hitung total\nconst totalPenjualan = salesData.reduce((sum, item) => sum + item.harga_jual, 0);\nconst totalMargin = salesData.reduce((sum, item) => sum + item.margin, 0);\nconst totalCost = salesData.reduce((sum, item) => sum + item.cost, 0);\nconst totalProfit = totalPenjualan - totalCost;\n\n// Siapkan data untuk Excel\nconst excelData = [\n  ['LAPORAN KEUANGAN PENJUALAN'],\n  ['Tanggal Laporan:', new Date().toLocaleDateString('id-ID')],\n  [''],\n  ['Tanggal', 'Nama Produk', 'Harga Jual', 'Margin', 'Cost'],\n  ...salesData.map(item => [\n    item.tanggal,\n    item.nama_produk,\n    item.harga_jual,\n    item.margin,\n    item.cost\n  ]),\n  [''],\n  ['RINGKASAN'],\n  ['Total Penjualan:', totalPenjualan],\n  ['Total Margin:', totalMargin],\n  ['Total Cost:', totalCost],\n  ['Total Profit:', totalProfit],\n  ['Jumlah Produk:', salesData.length]\n];\n\nreturn [{\n  json: {\n    excelData,\n    totalPenjualan,\n    totalMargin,\n    totalCost,\n    totalProfit,\n    jumlahProduk: salesData.length,\n    chat_id: chatId\n  }\n}];"
+        "jsCode": "try {\n  // Baca data dari Google Sheets atau buat data kosong jika belum ada\n  let salesData = [];\n  let chatId;\n  let hasValidData = false;\n\n  // Cek apakah ada input dari Google Sheets atau dari trigger\n  if ($input.all().length > 0) {\n    const inputData = $input.all();\n    \n    // Ambil chat_id dari berbagai sumber\n    for (let i = 0; i < inputData.length; i++) {\n      const item = inputData[i];\n      \n      // Prioritas 1: dari message chat\n      if (item.json && item.json.message && item.json.message.chat && item.json.message.chat.id) {\n        chatId = item.json.message.chat.id;\n        break;\n      }\n      // Prioritas 2: dari chat_id langsung\n      else if (item.json && item.json.chat_id) {\n        chatId = item.json.chat_id;\n        break;\n      }\n    }\n    \n    // Proses data dari Google Sheets\n    if (inputData.length > 0 && inputData[0].json) {\n      // Jika input adalah array data dari Google Sheets\n      if (Array.isArray(inputData) && inputData.length > 0) {\n        salesData = inputData\n          .filter(item => item.json && typeof item.json === 'object')\n          .map(item => {\n            const data = item.json;\n            return {\n              tanggal: data.tanggal || data.Tanggal || '',\n              nama_produk: data.nama_produk || data['Nama Produk'] || data.product || '',\n              harga_jual: parseInt(String(data.harga_jual || data['Harga Jual'] || data.price || 0).replace(/[^0-9]/g, '')) || 0,\n              margin: parseInt(String(data.margin || data.Margin || 0).replace(/[^0-9]/g, '')) || 0,\n              cost: parseInt(String(data.cost || data.Cost || 0).replace(/[^0-9]/g, '')) || 0\n            };\n          })\n          .filter(item => item.nama_produk && item.nama_produk.trim() !== '' && item.harga_jual > 0);\n        \n        hasValidData = salesData.length > 0;\n      }\n    }\n  }\n\n  // Validasi chat_id - gunakan environment variable jika tidak ada\n  if (!chatId) {\n    try {\n      chatId = $env.ADMIN_CHAT_ID;\n      if (!chatId) {\n        throw new Error('ADMIN_CHAT_ID tidak ditemukan di environment variables');\n      }\n    } catch (error) {\n      console.log('Error accessing ADMIN_CHAT_ID:', error.message);\n      // Fallback chat ID untuk testing (ganti dengan chat ID admin yang valid)\n      chatId = '123456789'; // Ganti dengan chat ID admin yang sebenarnya\n    }\n  }\n\n  // Jika tidak ada data yang valid\n  if (!hasValidData || salesData.length === 0) {\n    return [{\n      json: {\n        hasData: false,\n        message: '📊 Belum ada data penjualan di Google Sheets.\\n\\n🔹 Silakan tambahkan data produk terlebih dahulu dengan format:\\n\\n📦 Nama Produk: [nama produk]\\n💰 Harga Jual: [harga]\\n📊 Margin: [margin]\\n💸 Cost: [cost]\\n\\nContoh:\\n📦 Nama Produk: Laptop Gaming\\n💰 Harga Jual: 15000000\\n📊 Margin: 2000000\\n💸 Cost: 13000000',\n        chat_id: chatId\n      }\n    }];\n  }\n\n  // Hitung total dengan validasi\n  const totalPenjualan = salesData.reduce((sum, item) => sum + (item.harga_jual || 0), 0);\n  const totalMargin = salesData.reduce((sum, item) => sum + (item.margin || 0), 0);\n  const totalCost = salesData.reduce((sum, item) => sum + (item.cost || 0), 0);\n  const totalProfit = totalPenjualan - totalCost;\n\n  // Siapkan data untuk Excel dengan format yang lebih baik\n  const excelData = [\n    ['LAPORAN KEUANGAN PENJUALAN'],\n    ['Tanggal Laporan:', new Date().toLocaleDateString('id-ID', { \n      year: 'numeric', \n      month: 'long', \n      day: 'numeric' \n    })],\n    ['Waktu Generate:', new Date().toLocaleTimeString('id-ID')],\n    [''],\n    ['No', 'Tanggal', 'Nama Produk', 'Harga Jual (Rp)', 'Margin (Rp)', 'Cost (Rp)', 'Profit (Rp)'],\n    ...salesData.map((item, index) => [\n      index + 1,\n      item.tanggal || 'N/A',\n      item.nama_produk || 'N/A',\n      item.harga_jual || 0,\n      item.margin || 0,\n      item.cost || 0,\n      (item.harga_jual || 0) - (item.cost || 0)\n    ]),\n    [''],\n    ['RINGKASAN KEUANGAN'],\n    ['Total Penjualan (Rp):', totalPenjualan],\n    ['Total Margin (Rp):', totalMargin],\n    ['Total Cost (Rp):', totalCost],\n    ['Total Profit (Rp):', totalProfit],\n    ['Jumlah Produk Terjual:', salesData.length],\n    ['Rata-rata Harga per Produk (Rp):', Math.round(totalPenjualan / salesData.length) || 0],\n    ['Margin Rata-rata (%):', Math.round((totalMargin / totalPenjualan) * 100) || 0]\n  ];\n\n  return [{\n    json: {\n      hasData: true,\n      excelData,\n      totalPenjualan,\n      totalMargin,\n      totalCost,\n      totalProfit,\n      jumlahProduk: salesData.length,\n      rataRataHarga: Math.round(totalPenjualan / salesData.length) || 0,\n      marginPersentase: Math.round((totalMargin / totalPenjualan) * 100) || 0,\n      chat_id: chatId,\n      salesData: salesData\n    }\n  }];\n\n} catch (error) {\n  console.error('Error in Generate Report:', error);\n  \n  // Fallback chat ID\n  let fallbackChatId;\n  try {\n    fallbackChatId = $env.ADMIN_CHAT_ID || '123456789';\n  } catch (e) {\n    fallbackChatId = '123456789';\n  }\n  \n  return [{\n    json: {\n      hasData: false,\n      message: '❌ Terjadi kesalahan saat memproses laporan:\\n\\n' + error.message + '\\n\\n🔧 Silakan coba lagi atau hubungi administrator.',\n      chat_id: fallbackChatId,\n      error: error.message\n    }\n  }];\n}"
       },
       "id": "generate-report",
       "name": "Generate Report",
@@ -222,9 +222,11 @@
     {
       "parameters": {
         "fileFormat": "xlsx",
+        "dataPropertyName": "excelData",
         "options": {
-          "fileName": "laporan_keuangan_{{new Date().toISOString().split('T')[0]}}.xlsx",
-          "sheetName": "Laporan Penjualan"
+          "fileName": "Laporan_Keuangan_{{new Date().toISOString().split('T')[0]}}.xlsx",
+          "sheetName": "Laporan Penjualan",
+          "headerRow": true
         },
         "binaryPropertyName": "excel_file"
       },
@@ -233,14 +235,14 @@
       "type": "n8n-nodes-base.convertToFile",
       "typeVersion": 1,
       "position": [
-        1340,
+        1560,
         400
       ]
     },
     {
       "parameters": {
         "chatId": "={{$json.chat_id || $env.ADMIN_CHAT_ID}}",
-        "text": "📊 LAPORAN KEUANGAN PENJUALAN\n\n📈 Total Penjualan: Rp {{$json.totalPenjualan.toLocaleString('id-ID')}}\n💰 Total Margin: Rp {{$json.totalMargin.toLocaleString('id-ID')}}\n💸 Total Cost: Rp {{$json.totalCost.toLocaleString('id-ID')}}\n🎯 Total Profit: Rp {{$json.totalProfit.toLocaleString('id-ID')}}\n📦 Jumlah Produk: {{$json.jumlahProduk}}\n\n📄 File Excel akan dikirim setelah pesan ini.",
+        "text": "📊 LAPORAN KEUANGAN PENJUALAN\n📅 {{new Date().toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })}}\n\n💰 RINGKASAN KEUANGAN:\n📈 Total Penjualan: Rp {{$json.totalPenjualan.toLocaleString('id-ID')}}\n💎 Total Margin: Rp {{$json.totalMargin.toLocaleString('id-ID')}}\n💸 Total Cost: Rp {{$json.totalCost.toLocaleString('id-ID')}}\n🎯 Total Profit: Rp {{$json.totalProfit.toLocaleString('id-ID')}}\n\n📊 STATISTIK:\n📦 Jumlah Produk Terjual: {{$json.jumlahProduk}}\n💵 Rata-rata Harga: Rp {{$json.rataRataHarga.toLocaleString('id-ID')}}\n📈 Margin Rata-rata: {{$json.marginPersentase}}%\n\n📄 File Excel detail akan dikirim setelah pesan ini.",
         "additionalFields": {}
       },
       "id": "send-report-summary",
@@ -248,7 +250,7 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1,
       "position": [
-        1560,
+        1780,
         300
       ],
       "credentials": {
@@ -274,7 +276,7 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1,
       "position": [
-        1560,
+        1780,
         500
       ],
       "credentials": {
@@ -310,7 +312,7 @@
           "string": [
             {
               "name": "chat_id",
-              "value": "==$env.ADMIN_CHAT_ID"
+              "value": "={{$env.ADMIN_CHAT_ID}}"
             }
           ]
         },
@@ -324,6 +326,67 @@
         460,
         800
       ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.hasData}}",
+              "operation": "equal",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-report-data",
+      "name": "Check Report Data",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1340,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{$json.chat_id}}",
+        "text": "={{$json.message}}"
+      },
+      "id": "send-no-data-message",
+      "name": "Send No Data Message",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+         1560,
+         600
+       ],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-credentials",
+          "name": "Telegram API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{$json.message ? $json.message.chat.id : $json.chat_id}}",
+        "text": "❌ Terjadi kesalahan saat memproses permintaan Anda:\n\n{{$json.error ? $json.error.message : 'Error tidak diketahui'}}\n\n🔧 Silakan coba lagi dalam beberapa saat atau hubungi administrator jika masalah berlanjut.\n\n💡 Tips:\n• Pastikan format pesan sudah benar\n• Pastikan koneksi internet stabil\n• Coba kirim /start untuk memulai ulang"
+      },
+      "id": "send-error-message",
+      "name": "Send Error Message",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1340,
+        700
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-credentials",
+          "name": "Telegram API"
+        }
+      }
     }
   ],
   "pinData": {},
@@ -410,6 +473,24 @@
     },
     "Generate Report": {
       "main": [
+        [
+          {
+            "node": "Check Report Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Report Data": {
+      "main": [
+        [
+          {
+            "node": "Send No Data Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
         [
           {
             "node": "Create Excel File",
