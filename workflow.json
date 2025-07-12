@@ -1,0 +1,502 @@
+{
+  "name": "Bot Telegram Laporan Penjualan",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ]
+      },
+      "id": "telegram-trigger",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "telegram-webhook",
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-credentials",
+          "name": "Telegram API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.message.text}}",
+              "operation": "startsWith",
+              "value2": "/start"
+            }
+          ]
+        }
+      },
+      "id": "check-start-command",
+      "name": "Check Start Command",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{$json.message.chat.id}}",
+        "text": "Selamat datang di Bot Laporan Penjualan!\n\nUntuk menambah data produk, kirim pesan dengan format:\n\n📦 Nama Produk: [nama]\n💰 Harga Jual: [harga]\n📊 Margin: [margin]\n💸 Cost: [cost]\n\nContoh:\n📦 Nama Produk: Laptop Gaming\n💰 Harga Jual: 15000000\n📊 Margin: 2000000\n💸 Cost: 13000000\n\nUntuk mendapatkan laporan, kirim: /laporan"
+      },
+      "id": "send-welcome",
+      "name": "Send Welcome Message",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        680,
+        200
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-credentials",
+          "name": "Telegram API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.message.text}}",
+              "operation": "startsWith",
+              "value2": "/laporan"
+            }
+          ]
+        }
+      },
+      "id": "check-report-command",
+      "name": "Check Report Command",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        680,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.message.text}}",
+              "operation": "contains",
+              "value2": "📦 Nama Produk:"
+            }
+          ]
+        }
+      },
+      "id": "check-product-data",
+      "name": "Check Product Data",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        680,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse data produk dari pesan Telegram\nconst message = $input.first().json.message.text;\nconst lines = message.split('\\n');\n\nlet productData = {\n  nama_produk: '',\n  harga_jual: 0,\n  margin: 0,\n  cost: 0,\n  tanggal: new Date().toISOString().split('T')[0],\n  chat_id: $input.first().json.message.chat.id\n};\n\nlines.forEach(line => {\n  if (line.includes('📦 Nama Produk:')) {\n    productData.nama_produk = line.split('📦 Nama Produk:')[1].trim();\n  } else if (line.includes('💰 Harga Jual:')) {\n    productData.harga_jual = parseInt(line.split('💰 Harga Jual:')[1].trim().replace(/[^0-9]/g, ''));\n  } else if (line.includes('📊 Margin:')) {\n    productData.margin = parseInt(line.split('📊 Margin:')[1].trim().replace(/[^0-9]/g, ''));\n  } else if (line.includes('💸 Cost:')) {\n    productData.cost = parseInt(line.split('💸 Cost:')[1].trim().replace(/[^0-9]/g, ''));\n  }\n});\n\n// Validasi data\nif (!productData.nama_produk || productData.harga_jual === 0 || productData.margin === 0 || productData.cost === 0) {\n  throw new Error('Data produk tidak lengkap. Pastikan semua field terisi dengan benar.');\n}\n\nreturn [productData];"
+      },
+      "id": "parse-product-data",
+      "name": "Parse Product Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Data Penjualan",
+          "mode": "name"
+        },
+        "columns": {
+           "mappingMode": "autoMapInputData"
+         },
+        "options": {
+          "useAppend": true
+        }
+      },
+      "id": "save-to-sheets",
+      "name": "Save to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        1120,
+        600
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-credentials",
+          "name": "Google Sheets OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{$json.chat_id}}",
+        "text": "✅ Data produk berhasil disimpan!\n\n📦 Produk: {{$json.nama_produk}}\n💰 Harga Jual: Rp {{$json.harga_jual.toLocaleString('id-ID')}}\n📊 Margin: Rp {{$json.margin.toLocaleString('id-ID')}}\n💸 Cost: Rp {{$json.cost.toLocaleString('id-ID')}}\n📅 Tanggal: {{$json.tanggal}}"
+      },
+      "id": "confirm-save",
+      "name": "Confirm Save",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1340,
+        600
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-credentials",
+          "name": "Telegram API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Data Penjualan",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "read-sheets-data",
+      "name": "Read Google Sheets Data",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        900,
+        400
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-credentials",
+          "name": "Google Sheets OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Baca data dari Google Sheets atau buat data kosong jika belum ada\nlet salesData = [];\nlet chatId;\n\n// Cek apakah ada input dari Google Sheets atau dari trigger\nif ($input.all().length > 0) {\n  const inputData = $input.all();\n  \n  // Jika ada data dari Google Sheets\n  if (inputData[0].json && Array.isArray(inputData)) {\n    salesData = inputData.map(item => ({\n      tanggal: item.json.tanggal || '',\n      nama_produk: item.json.nama_produk || '',\n      harga_jual: parseInt(item.json.harga_jual) || 0,\n      margin: parseInt(item.json.margin) || 0,\n      cost: parseInt(item.json.cost) || 0\n    })).filter(item => item.nama_produk); // Filter data yang valid\n  }\n  \n  // Ambil chat_id dari input pertama - dengan validasi tambahan\n  if (inputData[0].json.message && inputData[0].json.message.chat && inputData[0].json.message.chat.id) {\n    chatId = inputData[0].json.message.chat.id;\n  } else if (inputData[0].json.chat_id) {\n    chatId = inputData[0].json.chat_id;\n  }\n}\n\n// Validasi chat_id - gunakan environment variable jika tidak ada\nif (!chatId) {\n  // Gunakan ADMIN_CHAT_ID dari environment variable\n  chatId = $env.ADMIN_CHAT_ID;\n  \n  // Jika masih kosong, gunakan fallback\n  if (!chatId) {\n    throw new Error('Chat ID tidak ditemukan. Pastikan ADMIN_CHAT_ID sudah diatur di environment variables.');\n  }\n}\n\nif (salesData.length === 0) {\n  return [{\n    json: {\n      message: 'Belum ada data penjualan di Google Sheets. Silakan tambahkan data produk terlebih dahulu.',\n      chat_id: chatId\n    }\n  }];\n}\n\n// Hitung total\nconst totalPenjualan = salesData.reduce((sum, item) => sum + item.harga_jual, 0);\nconst totalMargin = salesData.reduce((sum, item) => sum + item.margin, 0);\nconst totalCost = salesData.reduce((sum, item) => sum + item.cost, 0);\nconst totalProfit = totalPenjualan - totalCost;\n\n// Siapkan data untuk Excel\nconst excelData = [\n  ['LAPORAN KEUANGAN PENJUALAN'],\n  ['Tanggal Laporan:', new Date().toLocaleDateString('id-ID')],\n  [''],\n  ['Tanggal', 'Nama Produk', 'Harga Jual', 'Margin', 'Cost'],\n  ...salesData.map(item => [\n    item.tanggal,\n    item.nama_produk,\n    item.harga_jual,\n    item.margin,\n    item.cost\n  ]),\n  [''],\n  ['RINGKASAN'],\n  ['Total Penjualan:', totalPenjualan],\n  ['Total Margin:', totalMargin],\n  ['Total Cost:', totalCost],\n  ['Total Profit:', totalProfit],\n  ['Jumlah Produk:', salesData.length]\n];\n\nreturn [{\n  json: {\n    excelData,\n    totalPenjualan,\n    totalMargin,\n    totalCost,\n    totalProfit,\n    jumlahProduk: salesData.length,\n    chat_id: chatId\n  }\n}];"
+      },
+      "id": "generate-report",
+      "name": "Generate Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "fileFormat": "xlsx",
+        "options": {
+          "fileName": "laporan_keuangan_{{new Date().toISOString().split('T')[0]}}.xlsx",
+          "sheetName": "Laporan Penjualan"
+        },
+        "binaryPropertyName": "excel_file"
+      },
+      "id": "create-excel",
+      "name": "Create Excel File",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1,
+      "position": [
+        1340,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{$json.chat_id || $env.ADMIN_CHAT_ID}}",
+        "text": "📊 LAPORAN KEUANGAN PENJUALAN\n\n📈 Total Penjualan: Rp {{$json.totalPenjualan.toLocaleString('id-ID')}}\n💰 Total Margin: Rp {{$json.totalMargin.toLocaleString('id-ID')}}\n💸 Total Cost: Rp {{$json.totalCost.toLocaleString('id-ID')}}\n🎯 Total Profit: Rp {{$json.totalProfit.toLocaleString('id-ID')}}\n📦 Jumlah Produk: {{$json.jumlahProduk}}\n\n📄 File Excel akan dikirim setelah pesan ini.",
+        "additionalFields": {}
+      },
+      "id": "send-report-summary",
+      "name": "Send Report Summary",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1560,
+        300
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-credentials",
+          "name": "Telegram API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendDocument",
+        "chatId": "={{$json.chat_id || $env.ADMIN_CHAT_ID}}",
+        "binaryData": true,
+        "binaryPropertyName": "excel_file",
+        "additionalFields": {
+          "caption": "📊 Laporan Keuangan Penjualan - {{new Date().toLocaleDateString('id-ID')}}"
+        }
+      },
+      "id": "send-excel-file",
+      "name": "Send Excel File",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1560,
+        500
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-credentials",
+          "name": "Telegram API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "id": "daily-schedule",
+      "name": "Daily Schedule (9 AM)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "chat_id",
+              "value": "==$env.ADMIN_CHAT_ID"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-admin-chat",
+      "name": "Set Admin Chat ID",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [
+        460,
+        800
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Check Start Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Start Command": {
+      "main": [
+        [
+          {
+            "node": "Send Welcome Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check Report Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Report Command": {
+      "main": [
+        [
+          {
+            "node": "Read Google Sheets Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check Product Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Product Data": {
+      "main": [
+        [
+          {
+            "node": "Parse Product Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Product Data": {
+      "main": [
+        [
+          {
+            "node": "Save to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save to Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Confirm Save",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Report": {
+      "main": [
+        [
+          {
+            "node": "Create Excel File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Excel File": {
+      "main": [
+        [
+          {
+            "node": "Send Report Summary",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Excel File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Schedule (9 AM)": {
+      "main": [
+        [
+          {
+            "node": "Set Admin Chat ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    
+    "Set Admin Chat ID": {
+      "main": [
+        [
+          {
+            "node": "Read Google Sheets Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Google Sheets Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "timezone": "Asia/Jakarta"
+  },
+  "versionId": "1",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "id": "telegram-sales-bot",
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "telegram",
+      "name": "telegram"
+    },
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "sales",
+      "name": "sales"
+    },
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "excel",
+      "name": "excel"
+    }
+  ]
+}
